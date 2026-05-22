@@ -1,0 +1,1204 @@
+{
+  "name": "finalized workflow 3",
+  "nodes": [
+    {
+      "parameters": {
+        "fileSelector": "C:\\Users\\marti\\.n8n-files\\counter.txt",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1.1,
+      "position": [
+        -6784,
+        240
+      ],
+      "id": "27b28376-ce1b-4c92-b265-c3ce96cbf356",
+      "name": "Read/Write Files from Disk1",
+      "alwaysOutputData": false,
+      "executeOnce": false
+    },
+    {
+      "parameters": {
+        "operation": "binaryToPropery",
+        "destinationKey": "verilog_text",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        -6560,
+        240
+      ],
+      "id": "fad9ed21-5c70-4583-b129-fb56e0dd1825",
+      "name": "Extract from File"
+    },
+    {
+      "parameters": {
+        "jsCode": "const base64String = $json[\"verilog_text\"];\nconst decodedText = Buffer.from(base64String, \"base64\").toString(\"utf8\");\n\nreturn [{\n  json: {\n    prompt: decodedText   // pass raw source — Verilog Analyser will summarise it\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -6336,
+        240
+      ],
+      "id": "a1b84608-602f-499c-afd5-44e442898b95",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "respondWith": "allIncomingItems",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        -5760,
+        176
+      ],
+      "id": "f47c2ef5-bf0c-45d7-85cf-4ebb7bfaca7a",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "path": "audit_cpu",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -7008,
+        240
+      ],
+      "id": "615a8343-172b-4f09-863e-f215dfcf04d6",
+      "name": "Webhook",
+      "webhookId": "fa4b7662-a742-436a-ba1b-5e8157a2868a"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.jdoodle.com/v1/execute",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "clientId"
+            },
+            {
+              "name": "clientSecret"
+            },
+            {
+              "name": "language",
+              "value": "verilog"
+            },
+            {
+              "name": "versionIndex",
+              "value": "0"
+            },
+            {
+              "name": "script",
+              "value": "={{ $json.combined_script }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -4512,
+        176
+      ],
+      "id": "653fe898-14ed-41c7-aa9d-485ffc7b79ba",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "jsCode": "let history = [];\ntry {\n  history = $node[\"update counter\"].json.history || [];\n} catch (e) {\n  history = [];\n}\n\nconst geminiJson = $node[\"Message a model\"].json;\nlet testbenchText = \"\";\nif (geminiJson.candidates && geminiJson.candidates[0] && geminiJson.candidates[0].content) {\n  testbenchText = geminiJson.candidates[0].content.parts[0].text || \"\";\n} else if (geminiJson.text) {\n  testbenchText = geminiJson.text;\n}\n\n// Generic regex — matches any: fault_buffer = uut.<anything> ^ (N'h1 << BIT)\nconst bitMatch = testbenchText.match(/fault_buffer\\s*=\\s*uut\\.\\w+\\s*\\^\\s*\\(\\d+'h1\\s*<<\\s*(\\d+)\\)/);\nconst currentBit = bitMatch ? bitMatch[1] : null;\n\nif (currentBit !== null && !isNaN(currentBit)) {\n  history.push(parseInt(currentBit));\n}\n\nreturn [{\n  json: {\n    counter: $runIndex + 1,\n    history: history,\n    current_bit: currentBit,\n    max_trials: 4\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3840,
+        240
+      ],
+      "id": "5e22a4e8-639b-45ee-8762-f60c7d8f04ee",
+      "name": "update counter"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "6d00d959-3bd5-4da8-800c-03ca14b21bb1",
+              "leftValue": "={{ $json.counter }}",
+              "rightValue": 4,
+              "operator": {
+                "type": "number",
+                "operation": "lte"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -3616,
+        320
+      ],
+      "id": "0c287750-2142-4909-bb83-585f9081bcdf",
+      "name": "If",
+      "executeOnce": false
+    },
+    {
+      "parameters": {
+        "jsCode": "// Use the built-in runIndex to track the loop count\nconst currentRun = $runIndex; // Starts at 0, 1, 2...\n\nreturn {\n  counter: currentRun + 1,\n  // This tells the IF node exactly when to stop\n  isFinished: currentRun >= 9 \n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -4064,
+        240
+      ],
+      "id": "f2d5bb5e-4989-4308-a7d7-416caa696d86",
+      "name": "loop initilising"
+    },
+    {
+      "parameters": {
+        "amount": 20
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -4288,
+        240
+      ],
+      "id": "daa482eb-f6f1-41da-9262-127dae9aace0",
+      "name": "Wait",
+      "webhookId": "1d621559-02b8-47b2-bf0b-709ac36ee8e4"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -3168,
+        240
+      ],
+      "id": "fb83ec2e-90f7-493d-a7b1-d52a8e9b10f8",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Unify both Merge inputs into clean items with output field\nreturn $input.all().map(item => ({\n  json: {\n    output: item.json.output || \"\",\n    error_msg: item.json.error_msg || item.json.error || null,\n    statusCode: item.json.statusCode || null,\n    memory: item.json.memory || null,\n    cpuTime: item.json.cpuTime || null,\n    isExecutionSuccess: item.json.isExecutionSuccess || false,\n    isCompiled: item.json.isCompiled || false\n  }\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2944,
+        240
+      ],
+      "id": "d35e3a2a-7b0d-4116-90ea-c913c91cd09a",
+      "name": "Code in JavaScript5"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1. Reach back to get everything from the HTTP Request history\nconst allHistory = $('HTTP Request').all();\n\n// 2. Wrap each item inside a \"json\" key to avoid the \"error\" key conflict\nreturn allHistory.map((item) => {\n  return {\n    json: {\n      output: item.json.output,\n      error_msg: item.json.error || null, // Renamed to avoid reserved word issues\n      statusCode: item.json.statusCode,\n      memory: item.json.memory,\n      cpuTime: item.json.cpuTime,\n      compilationStatus: item.json.compilationStatus,\n      projectKey: item.json.projectKey,\n      isExecutionSuccess: item.json.isExecutionSuccess,\n      isCompiled: item.json.isCompiled\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3392,
+        320
+      ],
+      "id": "5c4d8634-47c0-418b-99d3-e7d28b69b7e6",
+      "name": "Code in JavaScript4"
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map((item, index) => {\n  const log = String(item.json.output || \"\");\n\n  const pcMatch  = log.match(/Old\\s*PC\\s*=\\s*([0-9a-fA-F]+)\\s*,\\s*New\\s*PC\\s*=\\s*([0-9a-fA-F]+)/i);\n  const bitMatch = log.match(/Bit\\s*(\\d+)\\s*flipped/i);\n\n  const oldPCStr = pcMatch ? pcMatch[1].padStart(8, '0') : \"00000000\";\n  const newPCStr = pcMatch ? pcMatch[2].padStart(8, '0') : \"00000000\";\n  const oldPC    = parseInt(oldPCStr, 16);\n  const newPC    = parseInt(newPCStr, 16);\n  const jump     = newPC - oldPC;\n\n  let outcome = \"No Effect\";\n  if (jump !== 0) {\n    outcome = (newPC % 4 !== 0) ? \"Critical: Alignment Crash\" : \"Success: Control Flow Hijack\";\n  }\n\n  return {\n    json: {\n      trial: index + 1,\n      bit_targeted: bitMatch ? bitMatch[1] : \"N/A\",\n      pc_before: oldPCStr,\n      pc_after:  newPCStr,\n      jump_distance_bytes: jump,\n      abs_jump:  Math.abs(jump),\n      severity:  (Math.abs(jump) > 1000) ? \"High\" : (Math.abs(jump) > 4 ? \"Medium\" : \"Low\"),\n      result_summary: outcome,\n      output: item.json.output || \"\"\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2720,
+        240
+      ],
+      "id": "c6a35c23-3475-456a-8892-7099d894f1d1",
+      "name": "Log Generator"
+    },
+    {
+      "parameters": {
+        "jsCode": "function geminiText(nodeData) {\n  const d = nodeData.first().json;\n  if (d.candidates && d.candidates[0] && d.candidates[0].content) {\n    return d.candidates[0].content.parts[0].text || \"\";\n  }\n  if (d.text) return d.text;\n  return JSON.stringify(d);\n}\n\nfunction cleanVerilog(src) {\n  // Strip markdown fences\n  src = src.replace(/```verilog|```/gi, '').trim();\n  // Collapse multiple trailing endmodule into exactly one\n  src = src.replace(/(\\bendmodule\\b\\s*)+$/i, 'endmodule');\n  return src.trim();\n}\n\nlet testbench = geminiText($('Message a model'));\nconst meta    = $('Parse Analyser').first().json;\nlet cpuCode   = meta.decoded || '';\n\ntestbench = cleanVerilog(testbench);\ncpuCode   = cleanVerilog(cpuCode);\n\nif (!testbench) throw new Error(\"Message a model produced no testbench output\");\nif (!cpuCode)   throw new Error(\"Source Code produced no decoded output\");\n\n// If LLM inlined the DUT definition inside the testbench, remove it\nconst dutName = (meta.module_name || '').replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');\nif (dutName) {\n  const inlineRe = new RegExp('module\\\\s+' + dutName + '\\\\b[\\\\s\\\\S]*?endmodule', 'gi');\n  testbench = testbench.replace(inlineRe, '').trim();\n}\n\n\n// Sanitize testbench: remove any wire/reg declarations that duplicate\n// an already-used implicit net (the most common LLM mistake: declaring\n// a wire AFTER it was already used in a port connection list).\n// Strategy: remove lines that declare wires for output ports we don't need.\ntestbench = testbench\n  .split('\\n')\n  .filter(line => {\n    // Drop lines like: wire [N:0] <something>_monitor; or wire <name>;\n    // that are ONLY used as output-port sinks (not driven anywhere else)\n    const isOutputSinkDecl = /^\\s*wire\\s+.*\\bmonitor\\b.*;/.test(line) ||\n                             /^\\s*wire\\s+\\[.*\\]\\s+\\w+\\s*;/.test(line) && \n                             !line.includes('//');\n    return !isOutputSinkDecl;\n  })\n  .join('\\n');\n\n\n\n\n\n// ── Port + Register enforcer ──────────────────────────────────────────────\n// Fixes: wrong port names, missing bit-widths on reg declarations,\n//        hallucinated uut.<reg> references throughout the testbench body.\n(function enforcePortsAndRegs() {\n  const name      = (meta.module_name        || '').trim();\n  const ports     = (meta.all_ports          || '').trim();\n  const portDecls = (meta.port_declarations  || '').trim();\n  const correctReg = (meta.primary_state_reg || '').trim();\n  const regWidth   = parseInt(meta.primary_reg_width) || 8;\n\n  if (!name || !ports) return;\n\n  const portList = ports.split(',').map(p => p.trim()).filter(Boolean);\n\n  // Determine output vs input and extract bit-width from port_declarations\n  // e.g. \"output reg [7:0] pc;\" → port \"pc\" is output, width \"[7:0]\"\n  function getPortWidth(portName) {\n    const re = new RegExp(\n      '(?:input|output)\\\\s+(?:reg\\\\s+|wire\\\\s+)?(\\\\[\\\\d+:\\\\d+\\\\])?\\\\s*' + portName + '\\\\b'\n    );\n    const m = portDecls.match(re);\n    return m && m[1] ? m[1] : '';   // e.g. \"[7:0]\" or \"\"\n  }\n\n  function isOutput(portName) {\n    return new RegExp('output[^;]*\\\\b' + portName + '\\\\b').test(portDecls);\n  }\n\n  // Build canonical instantiation\n  const connLines = portList.map(p => {\n    if (isOutput(p)) return `    .${p}()`;\n    return `    .${p}(${p})`;\n  }).join(',\\n');\n  const newInst = `${name} uut (\\n${connLines}\\n);`;\n\n  // Replace any existing instantiation block\n  testbench = testbench.replace(\n    /\\b\\w+\\s+uut\\s*\\([\\s\\S]*?\\)\\s*;/,\n    newInst\n  );\n\n  // Fix reg declarations — remove ALL existing input-port reg declarations\n  // then re-inject them with correct widths\n  portList.forEach(p => {\n    if (!isOutput(p)) {\n      // Remove old (possibly wrong-width) declaration\n      testbench = testbench.replace(\n        new RegExp('\\\\breg\\\\s+(?:\\\\[\\\\d+:\\\\d+\\\\]\\\\s+)?' + p + '\\\\s*;\\\\s*\\\\n?', 'g'),\n        ''\n      );\n    }\n  });\n\n  // Re-inject correct declarations after \"module test;\"\n  const newDecls = portList\n    .filter(p => !isOutput(p))\n    .map(p => {\n      const w = getPortWidth(p);\n      return `reg ${w ? w + ' ' : ''}${p};`;\n    })\n    .join('\\n');\n\n  testbench = testbench.replace(\n    /(module\\s+test\\s*;\\s*\\n)/,\n    `$1${newDecls}\\n`\n  );\n\n  // ── Fix ALL uut.<wrongReg> references in the testbench body ────────────\n  if (correctReg) {\n    // Collect every signal name used after \"uut.\" in the testbench\n    const usedRegs = [...testbench.matchAll(/\\buut\\.(\\w+)/g)].map(m => m[1]);\n    const wrongRegs = [...new Set(usedRegs)].filter(r => r !== correctReg);\n    wrongRegs.forEach(wr => {\n      const wrRe = new RegExp('\\\\buut\\\\.' + wr.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&') + '\\\\b', 'g');\n      testbench = testbench.replace(wrRe, 'uut.' + correctReg);\n    });\n\n    // Fix width of fault_buffer and state_before_fault declarations\n    const wStr = regWidth > 1 ? `[${regWidth-1}:0] ` : '';\n    testbench = testbench.replace(\n      /\\breg\\s+(?:\\[\\d+:\\d+\\]\\s+)?state_before_fault\\s*;/g,\n      `reg ${wStr}state_before_fault;`\n    );\n    testbench = testbench.replace(\n      /\\breg\\s+(?:\\[\\d+:\\d+\\]\\s+)?fault_buffer\\s*;/g,\n      `reg ${wStr}fault_buffer;`\n    );\n\n    // Fix the fault-injection width literal: 8'h1, 32'h1, etc.\n    testbench = testbench.replace(\n      /\\d+'h1\\s*<</g,\n      `${regWidth}'h1 <<`\n    );\n  }\n})();\n// ─────────────────────────────────────────────────────────────────────────\n\n// ── Module-name enforcer ──────────────────────────────────────────────────\n// The LLM sometimes instantiates a hallucinated module name instead of the\n// real DUT name. Detect this and replace every wrong instantiation with the\n// correct module name from Parse Analyser metadata.\nconst correctName = (meta.module_name || '').trim();\nif (correctName) {\n  // Find what module name the testbench actually used for \"uut\"\n  const usedNameMatch = testbench.match(/\\b(\\w+)\\s+uut\\s*\\(/);\n  const usedName = usedNameMatch ? usedNameMatch[1] : null;\n  if (usedName && usedName !== correctName && usedName !== 'module') {\n    // Replace all occurrences of the wrong name in the testbench\n    const wrongRe = new RegExp('\\\\b' + usedName.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&') + '\\\\b', 'g');\n    testbench = testbench.replace(wrongRe, correctName);\n    // Also fix any wrong internal signal references (e.g. uut.count → uut.pc)\n    // by replacing wrong register names with the known primary state reg\n    const correctReg = (meta.primary_state_reg || '').trim();\n    if (correctReg) {\n      // Find what reg name the LLM used after \"uut.\"\n      const wrongRegMatches = [...testbench.matchAll(/uut\\.(\\w+)/g)].map(m => m[1]);\n      const wrongRegs = [...new Set(wrongRegMatches)].filter(r => r !== correctReg);\n      for (const wr of wrongRegs) {\n        const wrRe = new RegExp('\\\\buut\\\\.' + wr.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&') + '\\\\b', 'g');\n        testbench = testbench.replace(wrRe, 'uut.' + correctReg);\n      }\n    }\n  }\n}\n// ─────────────────────────────────────────────────────────────────────────\n// DUT first so the module is defined before the testbench instantiates it\nconst combined_script = cpuCode + '\\n\\n' + testbench;\n\nreturn [{ json: { combined_script } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -4736,
+        176
+      ],
+      "id": "3e1c8d8f-f6e9-4bc2-b6f8-ac496060beaf",
+      "name": "Code + Testbench"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.jdoodle.com/v1/execute",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "clientId"
+            },
+            {
+              "name": "clientSecret"
+            },
+            {
+              "name": "language",
+              "value": "verilog"
+            },
+            {
+              "name": "versionIndex",
+              "value": "0"
+            },
+            {
+              "name": "script",
+              "value": "={{ $json.combined_script }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -672,
+        80
+      ],
+      "id": "6bab24ea-4d89-4b95-b84c-130098daa2fe",
+      "name": "HTTP Request1"
+    },
+    {
+      "parameters": {
+        "jsCode": "const attackLogs = $('Log Generator').all();\n\n// Validation Log Parser may have run multiple times — get last result\nlet valItem;\ntry { valItem = $('Validation Log Parser').first().json; }\ncatch(e) { valItem = {}; }\n\n// Retry attempt count\nconst retryAttempt = (() => {\n  try { return $('Hardening Loop Init').first().json.retry_attempt || 0; }\n  catch(e) { return 0; }\n})();\n\nconst phase1Lines = attackLogs.map(t => {\n  const j = t.json;\n  return `  Trial ${j.trial}: Bit ${j.bit_targeted} | PC ${j.pc_before} -> ${j.pc_after} | Jump: ${j.jump_distance_bytes}B | ${j.result_summary}`;\n}).join('\\n') || '  (no trials recorded)';\n\nconst jump = Math.abs(valItem.jump_distance_bytes || 0);\nconst mitigated = !valItem.still_vulnerable || jump <= 4;\n\nconst report = [\n  '========================================',\n  '  HARDWARE SECURITY DISCLOSURE REPORT',\n  '========================================',\n  '',\n  'PHASE 1 - FAULT INJECTION CAMPAIGN',\n  '------------------------------------',\n  phase1Lines,\n  '',\n  'PHASE 2 - MITIGATION APPLIED',\n  '------------------------------------',\n  '  Strategy : Triple Modular Redundancy (TMR) on Program Counter',\n  `  Attempts  : ${retryAttempt > 0 ? retryAttempt + 1 : 1} hardening iteration(s)`,\n  '  Details   : Shadow registers pc_1/pc_2/pc_3 + majority voter',\n  '',\n  'PHASE 3 - VALIDATION RESULT',\n  '------------------------------------',\n  `  Bit Re-Attacked : ${valItem.bit_targeted || 'N/A'}`,\n  `  PC Before Flip  : ${valItem.pc_before   || 'N/A'}`,\n  `  PC After Flip   : ${valItem.pc_after    || 'N/A'}`,\n  `  Jump Distance   : ${valItem.jump_distance_bytes || 0} bytes`,\n  `  Mitigation      : ${mitigated\n      ? 'CONFIRMED - 100% Mitigation Successful'\n      : 'MAX RETRIES REACHED - Partial mitigation only'}`,\n  '',\n  '========================================',\n  `  Generated: ${new Date().toISOString()}`,\n  '========================================',\n].join('\\n');\n\nreturn [{ json: {\n  disclosure_report: report,\n  summary_prompt: 'Rewrite as a polished executive-level security advisory with sections: Executive Summary, Vulnerability Details, Mitigation Applied, Validation Results, Recommendations.\\n\\n' + report\n}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        80
+      ],
+      "id": "3c7d5c40-f54c-439a-b4a1-7ad83a880148",
+      "name": "Final Code",
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.5-flash",
+          "mode": "list",
+          "cachedResultName": "models/gemini-2.5-flash"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=SYSTEM: You are a Lead Hardware Security Architect specialising in fault-tolerant design for ANY digital circuit.\n\nINPUT 1 — Original Verilog Source:\n{{ $('Source Code').first().json.decoded }}\n\nINPUT 2 — Module Metadata (extracted by static analysis):\n  Module Name        : {{ $('Parse Analyser').first().json.module_name }}\n  Primary State Reg  : {{ $('Parse Analyser').first().json.primary_state_reg }}\n  Register Width     : {{ $('Parse Analyser').first().json.primary_reg_width }} bits\n  Clock Port         : {{ $('Parse Analyser').first().json.clock_port }}\n  Reset Port         : {{ $('Parse Analyser').first().json.reset_port }}\n  Module Type        : {{ $('Parse Analyser').first().json.module_type }}\n  All Ports          : {{ $('Parse Analyser').first().json.all_ports }}\n\nINPUT 3 — Full Vulnerability Report (ALL serious faults found):\n{{ $json.vuln_report }}\n\nTotal Trials   : {{ $json.total_trials }}\nSerious Faults : {{ $json.serious_count }}\nCritical Bit   : {{ $json.worst_bit }}\nLargest Jump   : {{ $json.worst_jump }} bytes\n\nTASK:\nAnalyse all faults and produce ONE single hardened version of the module that mitigates every serious vulnerability.\n\nHARDENING STRATEGY — apply what is relevant to this module type:\n\n1. Triple Modular Redundancy (TMR) on the primary state register:\n   - Create three copies: <reg>_1, <reg>_2, <reg>_3\n   - Majority voter: assign <reg> = (<reg>_1 & <reg>_2) | (<reg>_2 & <reg>_3) | (<reg>_1 & <reg>_3);\n   - All three update identically on every clock edge\n\n2. If misalignment faults: add alignment enforcement appropriate to this module\n   (e.g. for CPUs: force pc[1:0] = 2'b00; for byte-addressed: force addr[0] = 0)\n\n3. If large jumps: add a watchdog that limits state register jumps to a safe range\n\n4. If FSM: add illegal-state detection that resets to a known-safe state\n\nSTRICT RULES:\n- Keep the EXACT module name: {{ $('Parse Analyser').first().json.module_name }}\n- Keep EXACT port names and directions as in the original\n- Return ONLY raw Verilog. No markdown. No backticks. No explanations.\n- Start with: module {{ $('Parse Analyser').first().json.module_name }} (\n- End with: endmodule"
+            }
+          ]
+        },
+        "simplify": "=",
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.1,
+      "position": [
+        -1600,
+        80
+      ],
+      "id": "6122b160-5742-4022-83e4-03253c19b23c",
+      "name": "Revise code",
+      "executeOnce": false,
+      "alwaysOutputData": true,
+      "credentials": {
+        "googlePalmApi": {
+          "id": "z4n0X8x1UCnutNCA",
+          "name": "Google Gemini(PaLM) Api account 5"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map(item => {\n  const j = item.json;\n  const jump    = Math.abs(j.jump_distance_bytes || 0);\n  const newPC   = parseInt(j.pc_after  || \"0\", 16);\n  const raw     = String(j.output || \"\").toLowerCase();\n\n  const isMisaligned = (newPC % 4 !== 0) && newPC !== 0;\n  const isLargeJump  = jump > 4;\n  const isHijack     = j.result_summary === \"Success: Control Flow Hijack\";\n  const isAlignCrash = j.result_summary === \"Critical: Alignment Crash\";\n  const isCrash      = raw.includes(\"segmentation fault\")\n                    || raw.includes(\"fatal error\")\n                    || raw.includes(\"runtime error\");\n\n  const is_serious = isMisaligned || isLargeJump || isHijack || isAlignCrash || isCrash;\n\n  const severity_reason =\n    isAlignCrash ? \"Critical: Instruction Misalignment\" :\n    isHijack     ? \"Critical: Control Flow Hijacked\"    :\n    isLargeJump  ? `High: Major PC Jump (${jump} bytes)` :\n    isMisaligned ? \"High: PC Misalignment\"              :\n    isCrash      ? \"High: Runtime Crash\"                :\n                   \"Masked: Negligible/No Effect\";\n\n  return {\n    json: {\n      ...j,\n      jump_distance: jump,\n      is_serious,\n      severity_reason\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2496,
+        240
+      ],
+      "id": "54be8237-ccdd-4284-bbeb-2c176b7ea936",
+      "name": "log checker"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Items that are not serious errors — label as Masked and stop\nreturn $input.all().map(item => ({\n  json: { ...item.json, final_status: 'Masked — No Action Required' }\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1824,
+        336
+      ],
+      "id": "bf2b0622-654d-43e1-9945-8a536154ab45",
+      "name": "Masked Result",
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.5-flash",
+          "mode": "list",
+          "cachedResultName": "models/gemini-2.5-flash"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=You are a professional hardware security report writer.\n\nBelow is a raw automated fault-injection and mitigation audit report. Rewrite it as a polished executive-level security advisory.\n\nUse exactly these sections:\n1. Executive Summary\n2. Module Under Test (name, type, critical register identified)\n3. Vulnerability Details (each bit attacked, state value before/after, jump distance, severity)\n4. Mitigation Strategy Applied (what hardening was applied and why)\n5. Validation Results (did re-attack confirm mitigation)\n6. Recommendations\n\nRAW REPORT:\n{{ $json.disclosure_report }}"
+            }
+          ]
+        },
+        "simplify": "=",
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.1,
+      "position": [
+        896,
+        80
+      ],
+      "id": "e9dcf5b7-142d-48ae-a88d-d6c3089e75c3",
+      "name": "Disclosure Report",
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "credentials": {
+        "googlePalmApi": {
+          "id": "z4n0X8x1UCnutNCA",
+          "name": "Google Gemini(PaLM) Api account 5"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const all = $input.all();\nconst serious = all.filter(i => i.json.is_serious === true);\nconst masked  = all.filter(i => i.json.is_serious !== true);\n\nconst vulnReport = serious.map(i => {\n  const j = i.json;\n  return `  - Trial ${j.trial}: Bit ${j.bit_targeted} | PC ${j.pc_before} -> ${j.pc_after} | Jump: ${j.jump_distance_bytes}B | ${j.severity_reason} | ${j.result_summary}`;\n}).join(\"\\n\");\n\nconst maskedReport = masked.map(i => {\n  const j = i.json;\n  return `  - Trial ${j.trial}: Bit ${j.bit_targeted} | ${j.severity_reason}`;\n}).join(\"\\n\");\n\nif (serious.length === 0) {\n  return [{\n    json: {\n      has_serious: false,          // explicit boolean false\n      vuln_report: \"No serious faults detected.\\n\" + maskedReport,\n      masked_report: maskedReport,\n      total_trials: all.length,\n      serious_count: 0\n    }\n  }];\n}\n\nreturn [{\n  json: {\n    has_serious: true,             // explicit boolean true\n    vuln_report: vulnReport,\n    masked_report: maskedReport,\n    total_trials: all.length,\n    serious_count: serious.length,\n    worst_bit:       serious[0].json.bit_targeted,\n    worst_jump:      serious[0].json.jump_distance_bytes,\n    worst_pc_before: serious[0].json.pc_before,\n    worst_pc_after:  serious[0].json.pc_after\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2272,
+        240
+      ],
+      "id": "86916e39-f9e7-4957-85d8-2c8c29be62c6",
+      "name": "Aggregate Logs"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "sc001-cond",
+              "leftValue": "={{ $json.has_serious }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -2048,
+        240
+      ],
+      "id": "333158a4-9f70-457c-8ec8-efc6151afb97",
+      "name": "Serious Check",
+      "executeOnce": false
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.5-flash",
+          "mode": "list",
+          "cachedResultName": "models/gemini-2.5-flash"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=You are a hardware security expert writing a Verilog validation testbench.\n\nMODULE METADATA:\n  Module Name       : {{ $('Parse Analyser').first().json.module_name }}\n  Primary State Reg : {{ $('Parse Analyser').first().json.primary_state_reg }}\n  Register Width    : {{ $('Parse Analyser').first().json.primary_reg_width }} bits\n  Clock Port        : {{ $('Parse Analyser').first().json.clock_port }}\n  Reset Port        : {{ $('Parse Analyser').first().json.reset_port }}\n  Reset Active-Low  : {{ $('Parse Analyser').first().json.reset_active_low }}\n  All Ports         : {{ $('Parse Analyser').first().json.all_ports }}\n\nHARDENED MODULE (the TMR-hardened version — do NOT include this in output, reference only):\nThe hardened module has THREE shadow copies of the primary state register:\n  <primary_state_reg>_1, <primary_state_reg>_2, <primary_state_reg>_3\nwith a majority voter producing the final <primary_state_reg>.\n\nTASK: Generate a complete Verilog testbench (module test;) that re-attacks the HARDENED module.\n\nGENERATION RULES:\n\nRULE 1 — Use the exact module name and ports from metadata above.\n  Instantiate: {{ $('Parse Analyser').first().json.module_name }} uut (...)\n  - Use ONLY the port names listed in 'All Ports' metadata above — no invented names.\n  - For INPUT ports: declare reg <portname>; and connect .portname(portname).\n  - For OUTPUT ports: connect with empty parens .portname() — NO wire declaration.\n  - VERIFY every port name against the metadata before writing.\n  - Access outputs via uut.<portname> directly in your logic.\n\nRULE 2 — Fault injection must target the _1 shadow register (not the voter output):\n  fault_buffer = uut.{{ $('Parse Analyser').first().json.primary_state_reg }}_1 ^ ({{ $('Parse Analyser').first().json.primary_reg_width }}'h1 << [BIT_NUMBER]);\n  force uut.{{ $('Parse Analyser').first().json.primary_state_reg }}_1 = fault_buffer;\n  #1;\n  release uut.{{ $('Parse Analyser').first().json.primary_state_reg }}_1;\n\nRULE 3 — Capture the voter output BEFORE the flip to measure if TMR held:\n  state_before_fault = uut.{{ $('Parse Analyser').first().json.primary_state_reg }};\n\nRULE 4 — MANDATORY DISPLAY after injection (exact format):\n  $display(\"Old PC = %h, New PC = %h\", state_before_fault, uut.{{ $('Parse Analyser').first().json.primary_state_reg }});\n  $display(\"Bit %0d flipped\", [BIT_NUMBER]);\n\nRULE 5 — Clock: 100MHz. Reset sequence matching the polarity in metadata.\nRULE 6 — Drive all non-clock/reset inputs with non-zero values after reset.\nRULE 7 — Wait 200ns after reset before injecting, wait 200ns after injecting, then $finish.\nRULE 8 — Monitor block (separate initial block):\n  initial begin\n    $display(\"START_LOG\");\n    $monitor(\"Time=%0t state=%h\", $time, uut.{{ $('Parse Analyser').first().json.primary_state_reg }});\n  end\nRULE 9 — Choose any bit from 0 to {{ $('Parse Analyser').first().json.primary_reg_width - 1 }}. Write as integer directly.\n\nOUTPUT: ONLY raw Verilog. Start: module test; End: endmodule. No markdown. No backticks."
+            }
+          ]
+        },
+        "simplify": "=",
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.1,
+      "position": [
+        -1248,
+        80
+      ],
+      "id": "bb84f688-1658-4bac-b64d-2655dad3464c",
+      "name": "Testbench Generator",
+      "executeOnce": false,
+      "alwaysOutputData": true,
+      "retryOnFail": false,
+      "credentials": {
+        "googlePalmApi": {
+          "id": "z4n0X8x1UCnutNCA",
+          "name": "Google Gemini(PaLM) Api account 5"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "function geminiText(nodeData) {\n  const d = nodeData.first().json;\n  if (d.candidates && d.candidates[0] && d.candidates[0].content) {\n    return d.candidates[0].content.parts[0].text || \"\";\n  }\n  if (d.text) return d.text;\n  return JSON.stringify(d);\n}\n\nfunction cleanVerilog(src) {\n  src = src.replace(/```verilog|```/gi, '').trim();\n  src = src.replace(/(\\bendmodule\\b\\s*)+$/i, 'endmodule');\n  return src.trim();\n}\n\nlet hardenedCPU = geminiText($('Revise code'));\nhardenedCPU = cleanVerilog(hardenedCPU);\n\nlet testbench = geminiText($('Testbench Generator'));\ntestbench = cleanVerilog(testbench);\n\nif (!hardenedCPU) throw new Error(\"Revise code produced no output\");\nif (!testbench)   throw new Error(\"Testbench Generator produced no output\");\n\nconst meta = $('Parse Analyser').first().json;\nconst dutName = (meta.module_name || '').replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');\nif (dutName) {\n  const inlineRe = new RegExp('module\\\\s+' + dutName + '\\\\b[\\\\s\\\\S]*?endmodule', 'gi');\n  testbench = testbench.replace(inlineRe, '').trim();\n}\n\n\n// Remove spurious output-port wire declarations that cause duplicate-net errors\ntestbench = testbench\n  .split('\\n')\n  .filter(line => {\n    const isOutputSinkDecl = /^\\s*wire\\s+.*\\bmonitor\\b.*;/.test(line) ||\n                             /^\\s*wire\\s+\\[.*\\]\\s+\\w+\\s*;/.test(line) &&\n                             !line.includes('//');\n    return !isOutputSinkDecl;\n  })\n  .join('\\n');\n\n\n\n\n\n// ── Port + Register enforcer ──────────────────────────────────────────────\n// Fixes: wrong port names, missing bit-widths on reg declarations,\n//        hallucinated uut.<reg> references throughout the testbench body.\n(function enforcePortsAndRegs() {\n  const name      = (meta.module_name        || '').trim();\n  const ports     = (meta.all_ports          || '').trim();\n  const portDecls = (meta.port_declarations  || '').trim();\n  const correctReg = (meta.primary_state_reg || '').trim();\n  const regWidth   = parseInt(meta.primary_reg_width) || 8;\n\n  if (!name || !ports) return;\n\n  const portList = ports.split(',').map(p => p.trim()).filter(Boolean);\n\n  // Determine output vs input and extract bit-width from port_declarations\n  // e.g. \"output reg [7:0] pc;\" → port \"pc\" is output, width \"[7:0]\"\n  function getPortWidth(portName) {\n    const re = new RegExp(\n      '(?:input|output)\\\\s+(?:reg\\\\s+|wire\\\\s+)?(\\\\[\\\\d+:\\\\d+\\\\])?\\\\s*' + portName + '\\\\b'\n    );\n    const m = portDecls.match(re);\n    return m && m[1] ? m[1] : '';   // e.g. \"[7:0]\" or \"\"\n  }\n\n  function isOutput(portName) {\n    return new RegExp('output[^;]*\\\\b' + portName + '\\\\b').test(portDecls);\n  }\n\n  // Build canonical instantiation\n  const connLines = portList.map(p => {\n    if (isOutput(p)) return `    .${p}()`;\n    return `    .${p}(${p})`;\n  }).join(',\\n');\n  const newInst = `${name} uut (\\n${connLines}\\n);`;\n\n  // Replace any existing instantiation block\n  testbench = testbench.replace(\n    /\\b\\w+\\s+uut\\s*\\([\\s\\S]*?\\)\\s*;/,\n    newInst\n  );\n\n  // Fix reg declarations — remove ALL existing input-port reg declarations\n  // then re-inject them with correct widths\n  portList.forEach(p => {\n    if (!isOutput(p)) {\n      // Remove old (possibly wrong-width) declaration\n      testbench = testbench.replace(\n        new RegExp('\\\\breg\\\\s+(?:\\\\[\\\\d+:\\\\d+\\\\]\\\\s+)?' + p + '\\\\s*;\\\\s*\\\\n?', 'g'),\n        ''\n      );\n    }\n  });\n\n  // Re-inject correct declarations after \"module test;\"\n  const newDecls = portList\n    .filter(p => !isOutput(p))\n    .map(p => {\n      const w = getPortWidth(p);\n      return `reg ${w ? w + ' ' : ''}${p};`;\n    })\n    .join('\\n');\n\n  testbench = testbench.replace(\n    /(module\\s+test\\s*;\\s*\\n)/,\n    `$1${newDecls}\\n`\n  );\n\n  // ── Fix ALL uut.<wrongReg> references in the testbench body ────────────\n  if (correctReg) {\n    // Collect every signal name used after \"uut.\" in the testbench\n    const usedRegs = [...testbench.matchAll(/\\buut\\.(\\w+)/g)].map(m => m[1]);\n    const wrongRegs = [...new Set(usedRegs)].filter(r => r !== correctReg);\n    wrongRegs.forEach(wr => {\n      const wrRe = new RegExp('\\\\buut\\\\.' + wr.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&') + '\\\\b', 'g');\n      testbench = testbench.replace(wrRe, 'uut.' + correctReg);\n    });\n\n    // Fix width of fault_buffer and state_before_fault declarations\n    const wStr = regWidth > 1 ? `[${regWidth-1}:0] ` : '';\n    testbench = testbench.replace(\n      /\\breg\\s+(?:\\[\\d+:\\d+\\]\\s+)?state_before_fault\\s*;/g,\n      `reg ${wStr}state_before_fault;`\n    );\n    testbench = testbench.replace(\n      /\\breg\\s+(?:\\[\\d+:\\d+\\]\\s+)?fault_buffer\\s*;/g,\n      `reg ${wStr}fault_buffer;`\n    );\n\n    // Fix the fault-injection width literal: 8'h1, 32'h1, etc.\n    testbench = testbench.replace(\n      /\\d+'h1\\s*<</g,\n      `${regWidth}'h1 <<`\n    );\n  }\n})();\n// ─────────────────────────────────────────────────────────────────────────\n\n// ── Module-name enforcer ──────────────────────────────────────────────────\nconst correctName = (meta.module_name || '').trim();\nif (correctName) {\n  const usedNameMatch = testbench.match(/\\b(\\w+)\\s+uut\\s*\\(/);\n  const usedName = usedNameMatch ? usedNameMatch[1] : null;\n  if (usedName && usedName !== correctName && usedName !== 'module') {\n    const wrongRe = new RegExp('\\\\b' + usedName.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&') + '\\\\b', 'g');\n    testbench = testbench.replace(wrongRe, correctName);\n    const correctReg = (meta.primary_state_reg || '').trim();\n    if (correctReg) {\n      const wrongRegMatches = [...testbench.matchAll(/uut\\.(\\w+)/g)].map(m => m[1]);\n      const wrongRegs = [...new Set(wrongRegMatches)].filter(r => r !== correctReg);\n      for (const wr of wrongRegs) {\n        const wrRe = new RegExp('\\\\buut\\\\.' + wr.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&') + '\\\\b', 'g');\n        testbench = testbench.replace(wrRe, 'uut.' + correctReg);\n      }\n    }\n  }\n}\n// ─────────────────────────────────────────────────────────────────────────\n// DUT first, then testbench\nconst combined_script = hardenedCPU + '\\n\\n' + testbench;\n\nreturn [{ json: { combined_script } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -896,
+        80
+      ],
+      "id": "f533fbf3-7674-4829-9893-eaf00475df71",
+      "name": "Build Hardened Script",
+      "executeOnce": false
+    },
+    {
+      "parameters": {
+        "jsCode": "const log = String($input.first().json.output || \"\");\n\nconst pcMatch  = log.match(/Old\\s*PC\\s*=\\s*([0-9a-fA-F]+)\\s*,\\s*New\\s*PC\\s*=\\s*([0-9a-fA-F]+)/i);\nconst bitMatch = log.match(/Bit\\s*(\\d+)\\s*flipped/i);\n\nconst oldPCStr = pcMatch ? pcMatch[1].padStart(8,'0') : \"00000000\";\nconst newPCStr = pcMatch ? pcMatch[2].padStart(8,'0') : \"00000000\";\nconst oldPC    = parseInt(oldPCStr, 16);\nconst newPC    = parseInt(newPCStr, 16);\nconst jump     = newPC - oldPC;\nconst absJump  = Math.abs(jump);\n\n// Explicit boolean — never undefined\nconst isMisaligned = (newPC % 4 !== 0) && newPC !== 0;\nconst still_vulnerable = (absJump > 4 || isMisaligned) ? true : false;\n\nlet outcome = \"No Effect / Mitigated\";\nif (still_vulnerable) {\n  outcome = isMisaligned ? \"Critical: Alignment Crash\" : \"Still Vulnerable: Control Flow Hijack\";\n}\n\nreturn [{\n  json: {\n    bit_targeted:        bitMatch ? bitMatch[1] : \"N/A\",\n    pc_before:           oldPCStr,\n    pc_after:            newPCStr,\n    jump_distance_bytes: jump,\n    abs_jump:            absJump,\n    result_summary:      outcome,\n    output:              log,\n    still_vulnerable:    still_vulnerable   // always explicit boolean true or false\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -448,
+        80
+      ],
+      "id": "455a5161-f123-4a55-8b2f-590474c2ecd0",
+      "name": "Validation Log Parser",
+      "executeOnce": false
+    },
+    {
+      "parameters": {
+        "jsCode": "function geminiText(nodeData) {\n  const d = nodeData.first().json;\n  if (d.candidates && d.candidates[0] && d.candidates[0].content) {\n    return d.candidates[0].content.parts[0].text || \"\";\n  }\n  if (d.text) return d.text;\n  return \"\";\n}\n\nlet hardenedCode = geminiText($('Revise code'));\nhardenedCode = hardenedCode.replace(/```verilog|```/gi, '').trim();\n\n// Get actual module name for the filename\nconst moduleName = $('Parse Analyser').first().json.module_name || \"module\";\nconst fileName = moduleName + \"_hardened.v\";\n\nconst base64Content = Buffer.from(hardenedCode, 'utf-8').toString('base64');\n\nreturn [{\n  json: { fileName },\n  binary: {\n    data: {\n      data: base64Content,\n      mimeType: 'text/plain',\n      fileExtension: 'v',\n      fileName: fileName\n    }\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1248,
+        80
+      ],
+      "id": "65625b1d-2843-4ce7-be42-7b69857699d4",
+      "name": "Prepare Hardened File",
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "C:/Users/marti/.n8n-files/counter.txt",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1.1,
+      "position": [
+        1472,
+        80
+      ],
+      "id": "8319da8d-e35f-48b8-9d9c-7e89ebce38cb",
+      "name": "Save Hardened Code to Disk",
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "vri-cond1",
+              "leftValue": "={{ $json.still_vulnerable }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -224,
+        80
+      ],
+      "id": "59df1c4a-9fd4-4306-9a9d-431ba0724b69",
+      "name": "Validation Result IF",
+      "executeOnce": false
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "7e260e41-a298-4bc1-8d10-93e1cfc6478c",
+      "name": "Hardening Wait",
+      "webhookId": "hardening-wait-webhook-001",
+      "executeOnce": false
+    },
+    {
+      "parameters": {
+        "jsCode": "const attempt = $runIndex + 1;\n\nconst aggItem = $('Aggregate Logs').first().json;\nconst valItem = $('Validation Log Parser').first().json;\n\nconst enrichedReport = [\n  \"=== ORIGINAL FAULT INJECTION FINDINGS ===\",\n  aggItem.vuln_report || \"(none)\",\n  \"\",\n  `=== PREVIOUS HARDENING ATTEMPT ${attempt} FAILED ===`,\n  `  Bit Re-Attacked : ${valItem.bit_targeted}`,\n  `  PC Before       : ${valItem.pc_before}`,\n  `  PC After        : ${valItem.pc_after}`,\n  `  Jump Distance   : ${valItem.jump_distance_bytes} bytes`,\n  `  Result          : ${valItem.result_summary}`,\n  \"\",\n  \"Try a stronger strategy:\",\n  \"  Attempt 1 failed -> Add jump-distance watchdog on top of TMR\",\n  \"  Attempt 2 failed -> Add PC alignment enforcement (pc[1:0] must be 2'b00)\",\n  \"  Attempt 3 failed -> Add full ECC with CPU reset on 2+ flips detected\",\n  \"  Attempt 4+ failed -> Combine ALL strategies above\"\n].join(\"\\n\");\n\nreturn [{\n  json: {\n    has_serious:     true,\n    vuln_report:     enrichedReport,\n    total_trials:    aggItem.total_trials    || 0,\n    serious_count:   aggItem.serious_count   || 0,\n    worst_bit:       valItem.bit_targeted,\n    worst_jump:      valItem.jump_distance_bytes,\n    worst_pc_before: valItem.pc_before,\n    worst_pc_after:  valItem.pc_after,\n    retry_attempt:   attempt,\n    still_vulnerable: true   // we only get here if still vulnerable\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        0
+      ],
+      "id": "e5f1a9bc-3cc4-48d7-b45c-79c9ce6621f7",
+      "name": "Hardening Loop Init",
+      "executeOnce": false
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "hci-cond1",
+              "leftValue": "={{ $json.still_vulnerable }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "hci-cond2",
+              "leftValue": "={{ $json.retry_attempt }}",
+              "rightValue": 5,
+              "operator": {
+                "type": "number",
+                "operation": "lte"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        448,
+        0
+      ],
+      "id": "72657fe9-b50a-4220-8560-c145bc37ddd6",
+      "name": "Hardening Counter IF",
+      "executeOnce": false
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\n\nreturn [{\n  json: {\n    has_serious:      item.has_serious      ?? true,\n    vuln_report:      item.vuln_report      || \"(no report)\",\n    total_trials:     item.total_trials     || 0,\n    serious_count:    item.serious_count    || 0,\n    worst_bit:        item.worst_bit        || \"N/A\",\n    worst_jump:       item.worst_jump       || 0,\n    worst_pc_before:  item.worst_pc_before  || \"00000000\",\n    worst_pc_after:   item.worst_pc_after   || \"00000000\",\n    retry_attempt:    item.retry_attempt    || 0,\n    still_vulnerable: item.still_vulnerable ?? true   // default true on first run\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1824,
+        144
+      ],
+      "id": "a1e4125b-e370-4029-9df0-cf7ec05cf215",
+      "name": "Revise Router",
+      "executeOnce": false
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.5-flash",
+          "mode": "list",
+          "cachedResultName": "models/gemini-2.5-flash"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=You are a Verilog static analysis expert. Analyse the Verilog source code below and return ONLY a single JSON object — no markdown, no backticks, no explanation.\n\nANALYSE THIS CODE:\n{{ $json.decoded }}\n\nEXTRACT and return this exact JSON structure:\n{\n  \"module_name\": \"<the module name from 'module X (...)'  >\",\n  \"primary_state_reg\": \"<the most critical sequential state register — typically named pc, ip, PC, state, addr, counter, or similar. This is the register whose bit-flip will cause the most critical failure>\",\n  \"primary_reg_width\": <integer bit width of primary_state_reg, e.g. 32>,\n  \"clock_port\": \"<name of the clock input port, e.g. clk, clock, CLK>\",\n  \"reset_port\": \"<name of the reset input port, e.g. reset, rst, rst_n, RESET — or null if none>\",\n  \"reset_active_low\": <true if reset is active-low (rst_n style), false if active-high>,\n  \"all_ports\": \"<complete port list string exactly as it appears in the module declaration, e.g. clk, reset, instr, result>\",\n  \"port_declarations\": \"<the full port declaration lines, e.g. input clk; input reset; input [31:0] instr; output [31:0] result;\">\",\n  \"other_state_regs\": [\"<list of other important sequential registers worth fault-testing, e.g. sp, lr, flags>\"],\n  \"module_type\": \"<one of: cpu, fsm, counter, memory_controller, uart, alu, arbiter, other>\",\n  \"has_program_counter\": <true if the module has a program-counter-like register, false otherwise>\n}\n\nRULES:\n- Return ONLY the raw JSON object. No markdown fences. No explanation.\n- If a field cannot be determined, use null for strings and false for booleans.\n- For primary_state_reg: prefer registers updated on clock edge that affect control flow."
+            }
+          ]
+        },
+        "simplify": "=",
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.1,
+      "position": [
+        -5312,
+        176
+      ],
+      "id": "1ae9ed6c-a26a-4954-a83e-f81521788c3b",
+      "name": "Verilog Analyser",
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "credentials": {
+        "googlePalmApi": {
+          "id": "V4tzZFw9mjIXQa7m",
+          "name": "Google Gemini(PaLM) Api account 4"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract the Gemini response and parse the JSON metadata\nfunction geminiText(nodeData) {\n  const d = nodeData.first().json;\n  if (d.candidates && d.candidates[0] && d.candidates[0].content) {\n    return d.candidates[0].content.parts[0].text || \"\";\n  }\n  if (d.text) return d.text;\n  return \"\";\n}\n\nlet raw = geminiText($('Verilog Analyser')).trim();\n\n// Strip any accidental markdown fences\nraw = raw.replace(/```json|```/gi, '').trim();\n\nlet meta;\ntry {\n  meta = JSON.parse(raw);\n} catch(e) {\n  // Fallback: if JSON parse fails, use generic defaults\n  meta = {\n    module_name: \"dut\",\n    primary_state_reg: \"state\",\n    primary_reg_width: 32,\n    clock_port: \"clk\",\n    reset_port: \"reset\",\n    reset_active_low: false,\n    all_ports: \"clk, reset\",\n    port_declarations: \"input clk; input reset;\",\n    other_state_regs: [],\n    module_type: \"other\",\n    has_program_counter: false\n  };\n}\n\n// Also carry the decoded source forward\nconst decoded = $('Source Code').first().json.decoded;\n\nreturn [{\n  json: {\n    ...meta,\n    decoded,\n    // Pre-build commonly used strings for downstream nodes\n    uut_state:  `uut.${meta.primary_state_reg}`,\n    uut_clk:    `uut.${meta.clock_port}`,\n    inst_line:  `${meta.module_name} uut (${meta.all_ports ? meta.all_ports.split(',').map(p => `.${p.trim()}(${p.trim()})`).join(', ') : ''});`,\n    reg_width:  meta.primary_reg_width || 32\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -4960,
+        176
+      ],
+      "id": "0d0f2ca7-e2d6-44ae-86e5-18aabcb427cd",
+      "name": "Parse Analyser",
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Example Base64 string (replace with your actual data)\nconst base64String = $('Extract from File').first().json.verilog_text;\n\n// Decode Base64 to a Buffer\nconst decodedBuffer = Buffer.from(base64String, \"base64\");\n\n// Convert Buffer to string (UTF-8 assumed)\nconst decodedString = decodedBuffer.toString(\"utf-8\");\n\n// Return properly formatted items\nreturn [\n  {\n    json: {\n      decoded: decodedString\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -5536,
+        176
+      ],
+      "id": "7b2448d5-0588-46b7-9d11-d9f5d620407a",
+      "name": "Source Code"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.5-flash",
+          "mode": "list",
+          "cachedResultName": "models/gemini-2.5-flash"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=You are a hardware security expert specialising in fault-injection testing for ANY Verilog design.\n\nYou will be given the full Verilog source of a module. Your job is to:\n\nIdentify the module name, clock port, reset port, and most critical state register automatically from the source.\n\nGenerate a complete self-contained fault-injection testbench that works with THIS specific module.\n\nVERILOG SOURCE TO ANALYSE:\n{{ $json.prompt }}\n\nBIT HISTORY (already tested — do NOT choose these again): {{ $json.history }}\n\n═══════════════════════════════════════════════════════\nGENERATION RULES — read the source above and follow these:\n═══════════════════════════════════════════════════════\n\nRULE 1 — MODULE NAME (CRITICAL — violations cause compile failure):\nRead the module declaration line (module <NAME> ...) from the VERILOG SOURCE above.\nThe ONLY valid module name is the one declared in that source.\nUse THAT exact name to instantiate: <NAME> uut (...);\nNEVER invent, guess, or substitute a different module name.\nVERIFY: before writing the instantiation, re-read the source and confirm the name matches.\n\nRULE 2 — PORT CONNECTION (CRITICAL — wrong ports cause elaboration failure):\nRead EVERY port from the module declaration in the source above.\nONLY use port names that literally appear in the module (...) declaration — no others.\nFor INPUT ports: declare a reg with the SAME name and connect: .portname(portname).\nFor OUTPUT ports: leave UNCONNECTED with empty parens: .portname().\nDo NOT invent, rename, or omit any port.\nDo NOT declare a wire for output ports — access outputs via uut.<portname> directly.\nVERIFY each port name against the source before writing the instantiation.\n\nRULE 3 — PRIMARY STATE REGISTER:\nIdentify the most critical sequential register in the design (PC, state, or count).\nThis is the register you will inject the fault into.\nCall it PRIMARY_REG in your testbench (replace with actual signal path uut.<reg_name>).\n\nRULE 4 — CLOCK:\nRead the clock port name from the source. Generate a clock at 100MHz (period=10ns).\n\nRULE 5 — RESET:\nRead the reset port name and polarity from the source.\nActive-high: reset=1; #20; reset=0; | Active-low: reset=0; #20; reset=1;\n\nRULE 6 — DRIVE INPUTS:\nAfter reset, drive non-clock/reset inputs with non-zero values. Change values every 20ns.\n\nRULE 7 — LET IT RUN:\nWait at least 200ns after reset before injecting the fault.\n\nRULE 8 — FAULT INJECTION (exact sequence):\nstate_before_fault = uut.<primary_reg>;\nfault_buffer = uut.<primary_reg> ^ ('h1 << [BIT_NUMBER]);\nforce uut.<primary_reg> = fault_buffer;\n#1;\nrelease uut.<primary_reg>;\n\nRULE 9 — MANDATORY DISPLAY (exact format):\n$display(\"Old PC = %h, New PC = %h\", state_before_fault, fault_buffer);\n$display(\"Bit %0d flipped\", [BIT_NUMBER]);\n\nRULE 10 — WAIT AND FINISH:\nAfter injection wait 200ns, then $finish.\n\nRULE 11 — MONITOR BLOCK:\ninitial begin $display(\"START_LOG\"); $monitor(\"Time=%0t state=%h\", $time, uut.<primary_reg>); end\n\nRULE 12 — NO INLINE INITIALIZATION (CRITICAL):\nAll 'reg' variables (including fault_buffer and state_before_fault) must be declared at the module level, BEFORE the initial blocks.\nDo NOT use 'reg [WIDTH-1:0] x = value;' or declare 'reg' inside an 'initial' block.\nDeclare them first, then assign values inside 'initial' blocks.\n\nBIT SELECTION:\nChoose one bit from 0 to (WIDTH-1) NOT in history. Write the integer directly.\n\nOUTPUT:\nReturn ONLY raw Verilog code. Start with: module test; End with: endmodule. No markdown. No backticks. No comments."
+            }
+          ]
+        },
+        "simplify": "=",
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.1,
+      "position": [
+        -6112,
+        256
+      ],
+      "id": "43200569-e347-46d5-b84f-57f2629a79bc",
+      "name": "Message a model",
+      "alwaysOutputData": true,
+      "credentials": {
+        "googlePalmApi": {
+          "id": "V4tzZFw9mjIXQa7m",
+          "name": "Google Gemini(PaLM) Api account 4"
+        }
+      },
+      "onError": "continueErrorOutput"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Read/Write Files from Disk1": {
+      "main": [
+        [
+          {
+            "node": "Extract from File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract from File": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "Message a model",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Read/Write Files from Disk1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond to Webhook": {
+      "main": [
+        [
+          {
+            "node": "Source Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "update counter": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Message a model",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code in JavaScript4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "loop initilising": {
+      "main": [
+        [
+          {
+            "node": "update counter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "loop initilising",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript5": {
+      "main": [
+        [
+          {
+            "node": "Log Generator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript4": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Log Generator": {
+      "main": [
+        [
+          {
+            "node": "log checker",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code + Testbench": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request1": {
+      "main": [
+        [
+          {
+            "node": "Validation Log Parser",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Final Code": {
+      "main": [
+        [
+          {
+            "node": "Disclosure Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "log checker": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Logs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Logs": {
+      "main": [
+        [
+          {
+            "node": "Serious Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Serious Check": {
+      "main": [
+        [
+          {
+            "node": "Revise Router",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Masked Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Revise code": {
+      "main": [
+        [
+          {
+            "node": "Testbench Generator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Testbench Generator": {
+      "main": [
+        [
+          {
+            "node": "Build Hardened Script",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Hardened Script": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validation Log Parser": {
+      "main": [
+        [
+          {
+            "node": "Validation Result IF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Disclosure Report": {
+      "main": [
+        [
+          {
+            "node": "Prepare Hardened File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Hardened File": {
+      "main": [
+        [
+          {
+            "node": "Save Hardened Code to Disk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validation Result IF": {
+      "main": [
+        [
+          {
+            "node": "Hardening Wait",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Final Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hardening Wait": {
+      "main": [
+        [
+          {
+            "node": "Hardening Loop Init",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hardening Loop Init": {
+      "main": [
+        [
+          {
+            "node": "Hardening Counter IF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hardening Counter IF": {
+      "main": [
+        [
+          {
+            "node": "Revise Router",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Final Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Revise Router": {
+      "main": [
+        [
+          {
+            "node": "Revise code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verilog Analyser": {
+      "main": [
+        [
+          {
+            "node": "Parse Analyser",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Analyser": {
+      "main": [
+        [
+          {
+            "node": "Code + Testbench",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Source Code": {
+      "main": [
+        [
+          {
+            "node": "Verilog Analyser",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "versionId": "a64eaef6-3b11-4bef-9916-093d92305ee1",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "91dd6b86504ed0a18b0953379244e6ae35868ca8cf093eb764b26cc00b4222de"
+  },
+  "id": "cVgfyG06lPeEI8XwOm9Qw",
+  "tags": []
+}
